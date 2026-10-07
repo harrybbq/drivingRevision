@@ -68,14 +68,16 @@ Tips live in `tips.json` at the root of the repo. There is no other backend.
 - Anyone using the same browser profile could use it, so don't save it on a shared computer.
 - If it leaks, delete it at https://github.com/settings/personal-access-tokens
 
-## No token? Read-only mode
+## Every device sees the same pins
 
-Without a token everything still works for reading. When you save a change:
+Anyone can view the map on any device: it reads the public `tips.json`. Changes only reach other devices once they're committed to GitHub, so add the token (once) on each device you edit with, usually your phone.
 
-- it is kept in this browser on this phone (it survives reloads and is shown as "only on this phone"), and
-- the tip is copied to the clipboard as JSON, so you can paste it to Claude to commit.
+Without a token on a device, changes you make there:
 
-Once you add a token, a **Save to GitHub** button pushes the local changes.
+- stay in that browser (they survive reloads), with a dashed outline on their pins, a red count on the Settings button and an "only on this device" note in the list, and
+- are copied to the clipboard as JSON, so you can paste them to Claude to commit.
+
+As soon as you add a token, any changes waiting on that device are saved to GitHub automatically. Saves that failed for lack of signal are retried when the page next opens or the connection comes back.
 
 ## tips.json format
 
