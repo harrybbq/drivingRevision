@@ -27,6 +27,11 @@ export const FILTERS = Object.freeze([
 // Form limits. Loading doesn't enforce them, so an over-long tip in tips.json still shows.
 export const LIMITS = Object.freeze({ where: 120, rule: 1000, why: 1000 });
 
+// Limits on what's drawn for a tip. Unlike LIMITS these are enforced on load
+// (extra marks and points are cut off, long labels shortened): drawings come
+// from the page, not from typing, so there's nothing worth showing past them.
+export const MARK_LIMITS = Object.freeze({ marks: 30, points: 40, label: 40 });
+
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 export class TipsError extends Error {
@@ -39,15 +44,70 @@ function cleanText(value) {
   return typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim() : '';
 }
 
+const oneLine = (s) => s.replace(/\s+/g, ' ').trim();
+
 function isCoord(value, max) {
   return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= max;
 }
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6; // ~10 cm, plenty for a pin
 
+// One [lat, lng] position, or null if it isn't one.
+function cleanPoint(value) {
+  return Array.isArray(value) && value.length === 2 && isCoord(value[0], 90) && isCoord(value[1], 180)
+    ? [round6(value[0]), round6(value[1])]
+    : null;
+}
+
+// A list of positions, or null if any of them is bad.
+function cleanPoints(value) {
+  const points = value.map(cleanPoint);
+  return points.includes(null) ? null : points;
+}
+
+// Label text is shown as plain text, so it only needs tidying, not escaping here.
+function cleanLabel(value) {
+  if (typeof value !== 'string') return '';
+  const cut = oneLine(value).slice(0, MARK_LIMITS.label);
+  return cut.replace(/[\uD800-\uDBFF]$/, '').trim(); // don't leave half an emoji at the cut
+}
+
+// Checks one mark and returns a fresh copy with only the keys its type uses,
+// or null if it can't be drawn.
+function cleanMark(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const { type } = raw;
+  if (type === 'arrow') {
+    const points = Array.isArray(raw.points) && raw.points.length >= 2
+      ? cleanPoints(raw.points.slice(0, MARK_LIMITS.points))
+      : null;
+    return points && { type, points };
+  }
+  if (type === 'giveway') {
+    const points = Array.isArray(raw.points) && raw.points.length === 2 ? cleanPoints(raw.points) : null;
+    return points && { type, points };
+  }
+  if (type === 'lane') {
+    const at = cleanPoint(raw.at);
+    return at && (raw.dir === 'left' || raw.dir === 'right') ? { type, dir: raw.dir, at } : null;
+  }
+  if (type === 'label') {
+    const text = cleanLabel(raw.text);
+    const at = cleanPoint(raw.at);
+    return text && at ? { type, text, at } : null;
+  }
+  return null;
+}
+
+// A bad mark is dropped on its own; it never hides the tip or the other marks.
+function cleanMarks(value) {
+  return Array.isArray(value) ? value.map(cleanMark).filter(Boolean).slice(0, MARK_LIMITS.marks) : [];
+}
+
 // Checks one entry from tips.json (or localStorage) and returns a clean copy.
 // Unknown categories fall back to "other" and unknown statuses to "learning"
 // rather than hiding the tip; a half-set position counts as not pinned.
+// marks is always a list, empty when there's nothing (usable) drawn.
 export function validateTip(raw) {
   const fail = (reason) => ({ ok: false, reason });
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail('not an object');
@@ -71,6 +131,7 @@ export function validateTip(raw) {
       lng: pinned ? round6(raw.lng) : null,
       status: raw.status === 'known' ? 'known' : 'learning',
       createdAt: new Date(created).toISOString(),
+      marks: cleanMarks(raw.marks),
     },
   };
 }
@@ -165,7 +226,8 @@ export function countTips(tips) {
 
 // ------------------------------------------------------------ file format
 
-// The shape written to tips.json, in schema order. "why" is left out when empty.
+// The shape written to tips.json, in schema order. "why" and "marks" are left out
+// when empty. Marks are cleaned on the way out, which also copies them.
 export function toStored(tip) {
   const out = { id: tip.id, where: tip.where, cat: tip.cat, rule: tip.rule };
   if (tip.why) out.why = tip.why;
@@ -173,11 +235,15 @@ export function toStored(tip) {
   out.lng = tip.lng;
   out.status = tip.status;
   out.createdAt = tip.createdAt;
+  const marks = cleanMarks(tip.marks);
+  if (marks.length) out.marks = marks;
   return out;
 }
 
-export function sameTip(a, b) {
-  return JSON.stringify(toStored(a)) === JSON.stringify(toStored(b));
+// With { marks: false }, two tips that differ only in what's drawn count as the same.
+export function sameTip(a, b, { marks = true } = {}) {
+  const stored = (tip) => toStored(marks ? tip : { ...tip, marks: [] });
+  return JSON.stringify(stored(a)) === JSON.stringify(stored(b));
 }
 
 export function parseList(text) {
@@ -210,11 +276,36 @@ export async function fetchTips({ url = 'tips.json', fetchImpl = globalThis.fetc
 
 // A change to the list. Saving re-applies it to whatever tips.json holds at that
 // moment, so a retry after a conflict can't undo someone else's commit.
-//   kind is for commit messages: add, edit, move, pin, known, learning, delete.
-export const upsertOp = (tip, kind = 'edit') => ({ type: 'upsert', kind, tip });
+//   kind is for commit messages: add, draw, edit, move, pin, known, learning, delete.
+//   withMarks says the change writes the tip's marks. Only drawing (or adding)
+//   does; every other change keeps whatever marks the repo holds.
+export const upsertOp = (tip, kind = 'edit') => ({
+  type: 'upsert',
+  kind,
+  tip,
+  withMarks: kind === 'draw' || kind === 'add',
+});
 export const deleteOp = (tip) => ({ type: 'delete', kind: 'delete', tip });
 
 const hasId = (entry, id) => entry !== null && typeof entry === 'object' && entry.id === id;
+
+const SCHEMA_KEYS = new Set(['id', 'where', 'cat', 'rule', 'why', 'lat', 'lng', 'status', 'createdAt', 'marks']);
+
+// The entry that replaces an existing one. Unless the change writes marks, the
+// repo's marks stay exactly as they are: a "Got it" made from a stale view, or by
+// an older cached copy of the page, must never wipe a drawing. Keys this version
+// doesn't know about are kept too, so fields a newer page adds survive this one.
+function replaceEntry(existing, op) {
+  const out = toStored(op.tip);
+  if (!op.withMarks) {
+    delete out.marks;
+    if (Object.hasOwn(existing, 'marks')) out.marks = existing.marks;
+  }
+  // out only holds schema keys, so the extras can't clash with it. fromEntries
+  // copies even an odd key like "__proto__" as plain data.
+  const extra = Object.entries(existing).filter(([key]) => !SCHEMA_KEYS.has(key));
+  return Object.fromEntries([...Object.entries(out), ...extra]);
+}
 
 // Applies a change to the raw tips.json array. Entries this page can't read are
 // left exactly as they are rather than dropped.
@@ -223,7 +314,7 @@ export function applyOp(list, op) {
   if (op.type === 'delete') return list.filter((entry) => !hasId(entry, id));
   const at = list.findIndex((entry) => hasId(entry, id));
   if (at === -1) return [...list, toStored(op.tip)];
-  return list.flatMap((entry, i) => (i === at ? [toStored(op.tip)] : hasId(entry, id) ? [] : [entry]));
+  return list.flatMap((entry, i) => (i === at ? [replaceEntry(entry, op)] : hasId(entry, id) ? [] : [entry]));
 }
 
 // text is tips.json as committed (null if the file doesn't exist yet).
@@ -231,10 +322,9 @@ export function applyOpToText(text, op) {
   return serialiseList(applyOp(text === null ? [] : parseList(text), op));
 }
 
-const oneLine = (s) => s.replace(/\s+/g, ' ').trim();
-
 const COMMIT_VERBS = {
   add: 'Add tip',
+  draw: 'Draw on map',
   edit: 'Edit tip',
   move: 'Move pin',
   pin: 'Pin tip',
@@ -276,18 +366,25 @@ const STATES = new Set(['saving', 'committed', 'local']);
 // After this long, a committed change stops overriding what the site serves.
 export const COMMITTED_TTL_MS = 30 * 60 * 1000;
 
+// A change that doesn't write marks shows the served marks, since those are the
+// ones the repo will keep.
 export function mergePending(remote, pending) {
-  const byId = new Map(remote.map((tip) => [tip.id, tip]));
+  const served = new Map(remote.map((tip) => [tip.id, tip]));
+  const byId = new Map(served);
   for (const [id, { op }] of pending) {
     if (op.type === 'delete') byId.delete(id);
+    else if (!op.withMarks && served.has(id)) byId.set(id, { ...op.tip, marks: served.get(id).marks });
     else byId.set(id, op.tip);
   }
   return [...byId.values()];
 }
 
+// A change that doesn't write marks has landed once everything else matches;
+// otherwise a "Got it" that kept the repo's drawing would never count as served.
 export function hasLanded(remote, op) {
   const served = remote.find((tip) => tip.id === op.tip.id);
-  return op.type === 'delete' ? !served : Boolean(served) && sameTip(served, op.tip);
+  if (op.type === 'delete') return !served;
+  return Boolean(served) && sameTip(served, op.tip, { marks: Boolean(op.withMarks) });
 }
 
 // Drops the changes the served file has caught up with, and committed ones that
@@ -312,7 +409,8 @@ export function serialisePending(pending) {
 }
 
 // Reads pending changes back from storage. A save that was in flight when the
-// page closed may or may not have landed, so it comes back as local.
+// page closed may or may not have landed, so it comes back as local. Changes
+// stored before withMarks existed get the default for their kind.
 export function restorePending(text) {
   const pending = new Map();
   let data;
@@ -327,8 +425,10 @@ export function restorePending(text) {
     const { type, kind } = raw.op;
     const tip = validateTip(raw.op.tip);
     if ((type !== 'upsert' && type !== 'delete') || !tip.ok || !STATES.has(raw.state)) continue;
+    const op = type === 'upsert' ? upsertOp(tip.tip, typeof kind === 'string' ? kind : 'edit') : deleteOp(tip.tip);
+    if (type === 'upsert' && typeof raw.op.withMarks === 'boolean') op.withMarks = raw.op.withMarks;
     const entry = {
-      op: { type, kind: typeof kind === 'string' ? kind : 'edit', tip: tip.tip },
+      op,
       state: raw.state === 'saving' ? 'local' : raw.state,
       at: Number.isFinite(raw.at) ? raw.at : 0,
     };
@@ -456,6 +556,12 @@ export class TipStore {
   // Shows the change straight away, then commits it if there's a token.
   // Resolves with the pending entry (state "local" if it wasn't committed).
   save(op) {
+    // Only the latest change per tip is kept, so a change made on top of a drawing
+    // that isn't served yet must write that drawing too. Its tip came from the
+    // merged view, so it already carries those marks.
+    if (op.type === 'upsert' && !op.withMarks && this.pending.get(op.tip.id)?.op.withMarks) {
+      op = { ...op, withMarks: true };
+    }
     const entry = { op, state: this.commitText ? 'saving' : 'local', at: this.now() };
     this.pending.set(op.tip.id, entry);
     if (entry.state === 'local') this.settle(); // a change that undoes itself needs no saving

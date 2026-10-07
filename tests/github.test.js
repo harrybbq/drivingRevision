@@ -200,3 +200,31 @@ test('store + GitHub together: a toggle commits only that tip', async () => {
   assert.equal(gh.requests.at(-1).body.message, 'Got it: B');
   assert.deepEqual(JSON.parse(gh.text).map((t) => [t.id, t.status]), [['a', 'learning'], ['b', 'known']]);
 });
+
+test('store + GitHub together: a drawing saved elsewhere mid-save survives a toggle', async () => {
+  const { TipStore, upsertOp, updateTip, validateTip, toStored } = await import('../js/tips.js');
+  const a = validateTip({ id: 'a', where: 'A', cat: 'hill', rule: 'R', lat: 55.95, lng: -4.78, status: 'learning', createdAt: '2026-01-01T00:00:00Z' }).tip;
+  const drawing = [{ type: 'arrow', points: [[55.95, -4.78], [55.951, -4.781]] }];
+  const asFile = (list) => `${JSON.stringify(list, null, 2)}\n`;
+  let served = asFile([toStored(a)]);
+  const gh = fakeGitHub({
+    text: served,
+    // Another device commits a drawing between this page's GET and PUT.
+    conflicts: [(g) => { g.text = asFile([{ ...toStored(a), marks: drawing }]); g.sha = 'shaDrawn'; }],
+  });
+  const store = new TipStore({ fetchImpl: async () => ({ ok: true, status: 200, text: async () => served }), pollMs: null });
+  await store.load();
+  store.commitText = ({ update, message }) => commitTextFile({ token: TOKEN, repo: REPO, fetchImpl: gh.fetch, update, message });
+  const entry = await store.save(upsertOp(updateTip(store.tips[0], { status: 'known' }), 'known'));
+  assert.equal(entry.state, 'committed');
+  assert.equal(gh.requests.filter((r) => r.method === 'PUT').length, 2);
+  assert.equal(gh.requests.at(-1).body.sha, 'shaDrawn');
+  const [saved] = JSON.parse(gh.text);
+  assert.equal(saved.status, 'known');
+  assert.deepEqual(saved.marks, drawing);
+
+  served = gh.text; // Pages catches up
+  await store.load();
+  assert.equal(store.pending.size, 0);
+  assert.deepEqual(store.tips[0].marks, drawing);
+});
