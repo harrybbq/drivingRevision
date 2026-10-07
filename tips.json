@@ -40,5 +40,26 @@
     "lng": null,
     "status": "learning",
     "createdAt": "2026-10-07T00:16:32.099Z"
+  },
+  {
+    "id": "9yqets6x",
+    "where": "Broomberry Dr / Chapel St junction",
+    "cat": "junction",
+    "rule": "When told to follow the road to Greenock (A8): stay in the left lane along Broomberry Dr, then move into the right lane to turn right at the junction.",
+    "lat": null,
+    "lng": null,
+    "status": "learning",
+    "createdAt": "2026-10-07T00:22:51.760Z"
+  },
+  {
+    "id": "ev8uc8od",
+    "where": "Broomberry Dr / Chapel St junction, other direction",
+    "cat": "junction",
+    "rule": "Coming the other way, when told to turn left then left again: turn left into the short road in the left lane. If the road on your right is clear you can keep going and turn left again without stopping.",
+    "why": "It is an open junction, so you can see the road on the right is clear as you approach.",
+    "lat": null,
+    "lng": null,
+    "status": "learning",
+    "createdAt": "2026-10-07T00:22:52.856Z"
   }
 ]
