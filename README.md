@@ -41,6 +41,7 @@ Optional: **Settings** → **General** → **Default branch** → switch to `mai
 - Filters: **All**, **Still learning**, **Got it**.
 - **Edit** changes the text. **Move pin**: drag the pin, or tap where it should go. **Delete** asks you to confirm on the page first.
 - Tips without a position show as "Not pinned yet", with a **Pin on map** button.
+- **Draw on map** (on a pinned tip): mark up the road with red arrows, give way bars, change-lane markers and short labels. They show only while that tip is open. On a phone, tap points rather than dragging: an arrow is a few taps along the road, then **Finish arrow**; a give way bar is two taps, one each side of the road; a lane marker or label is one tap. **Save drawing** saves them all at once.
 - On a desktop the list sits beside the map. On a phone it is a bottom sheet you can drag up.
 
 ## Saving: the repo is the database
@@ -112,6 +113,18 @@ As soon as you add a token, any changes waiting on that device are saved to GitH
 | `lat`, `lng` | Position as numbers, or `null` when not pinned yet. |
 | `status` | `"learning"` or `"known"` (Got it). |
 | `createdAt` | When the tip was added, ISO 8601. Sets the tip's number. |
+| `marks` | Optional. What's drawn on the map for this tip (see below). Left out when there's nothing drawn. |
+
+Each entry in `marks` is one of these. Positions are `[lat, lng]`:
+
+| Mark | Shape |
+| --- | --- |
+| Arrow | `{"type": "arrow", "points": [[lat, lng], …]}`, 2 to 40 points, drawn with an arrowhead at the last point |
+| Give way bar | `{"type": "giveway", "points": [[lat, lng], [lat, lng]]}` |
+| Change lanes | `{"type": "lane", "dir": "left" or "right", "at": [lat, lng]}` |
+| Label | `{"type": "label", "text": "Signal here", "at": [lat, lng]}`, up to 40 characters |
+
+A tip can have up to 30 marks. Only **Save drawing** changes them: other saves (Got it, Edit, Move pin) keep whatever marks the repo has, so ticking Got it on another device can't wipe a drawing. That holds for this version of the page onwards, so hard-refresh every device once after updating. Pages from before drawing existed don't know about marks and would drop them when saving.
 
 | Category key | Shown as |
 | --- | --- |
