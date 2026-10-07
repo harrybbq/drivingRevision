@@ -4,8 +4,8 @@
     "where": "Inverkip Rd roundabout by Lady Alice Primary School",
     "cat": "junction",
     "rule": "Coming down Inverkip Rd from the Morrisons Daily end, stay in the left lane on the approach, even when turning right towards Lady Alice Primary School.",
-    "lat": null,
-    "lng": null,
+    "lat": 55.941726,
+    "lng": -4.785571,
     "status": "learning",
     "createdAt": "2026-10-07T00:10:00.000Z"
   },
@@ -15,8 +15,8 @@
     "cat": "junction",
     "rule": "If told to take the third exit at the second roundabout (by Lithgow Way), approach the first roundabout in the right lane.",
     "why": "So you don't have to change lanes between the two roundabouts.",
-    "lat": null,
-    "lng": null,
+    "lat": 55.936222,
+    "lng": -4.703114,
     "status": "learning",
     "createdAt": "2026-10-07T00:11:00.000Z"
   },
@@ -25,8 +25,8 @@
     "where": "Scott Way junction by Chalmers Ln, near Bogston",
     "cat": "junction",
     "rule": "Open junction: if the road on your right is empty, you don't need to stop before turning left.",
-    "lat": null,
-    "lng": null,
+    "lat": 55.938259,
+    "lng": -4.71049,
     "status": "learning",
     "createdAt": "2026-10-07T00:12:00.000Z"
   },
