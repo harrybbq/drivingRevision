@@ -72,10 +72,11 @@ function contentsUrl(repo) {
 }
 
 async function request(fetchImpl, url, token, { method = 'GET', body } = {}) {
+  // Only Authorization and Content-Type need a CORS preflight, and GitHub allows both.
+  // (No X-GitHub-Api-Version header: the default version is the one this code targets.)
   const headers = {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${token}`,
-    'X-GitHub-Api-Version': '2022-11-28',
   };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   try {

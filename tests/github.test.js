@@ -70,7 +70,8 @@ test('commit: GET for the sha, then PUT base64 content to the branch', async () 
   assert.equal(get.url, `${FILE_URL}?ref=main`);
   assert.equal(get.cache, 'no-store');
   assert.equal(get.headers.Authorization, `Bearer ${TOKEN}`);
-  assert.equal(get.headers['X-GitHub-Api-Version'], '2022-11-28');
+  assert.deepEqual(Object.keys(get.headers).sort(), ['Accept', 'Authorization']); // nothing else to preflight
+  assert.deepEqual(Object.keys(put.headers).sort(), ['Accept', 'Authorization', 'Content-Type']);
   assert.equal(put.method, 'PUT');
   assert.deepEqual(Object.keys(put.body).sort(), ['branch', 'content', 'message', 'sha']);
   assert.equal(put.body.sha, 'sha0');
