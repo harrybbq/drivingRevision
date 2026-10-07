@@ -307,6 +307,7 @@ test('store falls back to the last copy it saw when offline', async () => {
   offline.subscribe((e) => e.type === 'load-error' && errors.push(e.error));
   assert.equal(await offline.load(), false);
   assert.equal(offline.fromSnapshot, true);
+  assert.match(offline.loadError.message, /connection/);
   assert.equal(offline.tips.length, 1);
   assert.equal(errors.length, 1);
 });

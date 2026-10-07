@@ -377,6 +377,7 @@ export class TipStore {
     this.remote = []; // tips as the site last served them
     this.rejected = []; // tips.json entries that failed validation
     this.loaded = false;
+    this.loadError = null; // the last load's error, cleared by the next good load
     this.fromSnapshot = false;
     this.pending = restorePending(storageGet(storage, PENDING_KEY));
     this.listeners = new Set();
@@ -426,6 +427,7 @@ export class TipStore {
       const { tips, rejected } = await fetchTips({ url: this.url, fetchImpl: this.fetchImpl });
       this.remote = tips;
       this.rejected = rejected;
+      this.loadError = null;
       this.fromSnapshot = false;
       storageSet(this.storage, SNAPSHOT_KEY, JSON.stringify(tips.map(toStored)));
     } catch (error) {
@@ -438,6 +440,7 @@ export class TipStore {
         }
       }
       this.loaded = true;
+      this.loadError = error;
       this.emit({ type: 'load-error', error });
       this.emit({ type: 'change' });
       this.schedulePoll();
