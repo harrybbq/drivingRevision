@@ -21,10 +21,13 @@ After each commit it takes about a minute for the live site to update.
 ## Turn on GitHub Pages (one-off)
 
 1. Open the repo on GitHub, then **Settings** → **Pages**.
-2. Under "Build and deployment", set **Source** to "Deploy from a branch".
-3. Set **Branch** to `main` and the folder to `/ (root)`, then press **Save**.
+2. Under "Build and deployment", set **Source** to **GitHub Actions**. (Deploying from the `main` branch also works, but see below.)
 
-The first deploy takes a minute or two. The site's URL then appears at the top of that Pages settings page. The empty `.nojekyll` file tells GitHub Pages to serve the files as they are.
+The workflow in `.github/workflows/pages.yml` deploys the site whenever `main` changes, including when you save from the map with your token. It can also be run by hand: **Actions** → **Deploy to GitHub Pages** → **Run workflow**. A deploy takes under a minute.
+
+Why the workflow: commits pushed from a Claude session don't start a branch-based Pages build, so with "Deploy from a branch" the site stayed on an old version. Claude runs the workflow by hand after pushing.
+
+If the live site looks out of date, check **Actions** for the latest run, then hard-refresh the page (GitHub Pages lets browsers cache files for up to 10 minutes).
 
 Optional: **Settings** → **General** → **Default branch** → switch to `main`. The repo's default branch was created as `claude/inspiring-goldberg-rxls2m` because it was the first branch pushed.
 

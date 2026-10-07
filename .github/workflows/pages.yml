@@ -1,6 +1,7 @@
-# Deploys the site to GitHub Pages on every push to main, whoever pushes it
-# (branch-based Pages only rebuilds for some pushers). Needs Settings → Pages →
-# Source: "GitHub Actions".
+# Deploys the site to GitHub Pages on pushes to main (including saves made from
+# the map with your token) and on demand from the Actions tab. Pushes made from a
+# Claude session don't start workflows or branch-based Pages builds, so after
+# pushing, Claude runs this workflow by hand.
 name: Deploy to GitHub Pages
 
 on:
