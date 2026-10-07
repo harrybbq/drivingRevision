@@ -25,7 +25,7 @@ After each commit it takes about a minute for the live site to update.
 
 The workflow in `.github/workflows/pages.yml` deploys the site whenever `main` changes, including when you save from the map with your token. It can also be run by hand: **Actions** → **Deploy to GitHub Pages** → **Run workflow**. A deploy takes under a minute.
 
-Why the workflow: commits pushed from a Claude session don't start a branch-based Pages build, so with "Deploy from a branch" the site stayed on an old version. Claude runs the workflow by hand after pushing.
+Why the workflow: commits pushed from a Claude session didn't start a branch-based Pages build, so with "Deploy from a branch" the site stayed on an old version. The workflow runs for every push to `main`, whoever makes it.
 
 If the live site looks out of date, check **Actions** for the latest run, then hard-refresh the page (GitHub Pages lets browsers cache files for up to 10 minutes).
 
