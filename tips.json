@@ -61,5 +61,25 @@
     "lng": null,
     "status": "learning",
     "createdAt": "2026-10-07T00:22:52.856Z"
+  },
+  {
+    "id": "fhfof168",
+    "where": "Union St give way at Kilblain St",
+    "cat": "junction",
+    "rule": "Coming along Union St to the give way: drop your speed as if approaching a closed junction. Once stopped, look right for a gap, then pull off to the left.",
+    "lat": null,
+    "lng": null,
+    "status": "learning",
+    "createdAt": "2026-10-07T00:36:42.377Z"
+  },
+  {
+    "id": "0rvz5t27",
+    "where": "Nelson St give way at Union St, by City Church",
+    "cat": "junction",
+    "rule": "Coming along Nelson St: pull up and stop at the give way, the same marking as at Kilblain St, and look right for a gap before turning left into Union St.",
+    "lat": null,
+    "lng": null,
+    "status": "learning",
+    "createdAt": "2026-10-07T00:36:43.435Z"
   }
 ]
