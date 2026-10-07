@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tip Map · Greenock &amp; Gourock</title>
+<meta name="description" content="My instructor's location-specific driving tips around Greenock and Gourock, pinned on a map for revision.">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#191D19" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 42'%3E%3Cpath d='M16 40.5C11.5 34.8 3 25.7 3 16a13 13 0 0 1 26 0c0 9.7-8.5 18.8-13 24.5z' fill='%230B6B3A' stroke='%23fff' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800&family=Overpass+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="css/app.css">
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <h1 class="brand">
+    <span class="eyebrow">Greenock · Gourock</span>
+    <span class="brand-name">Tip map</span>
+  </h1>
+  <nav class="topnav" aria-label="Pages">
+    <a class="nav-link" href="revision.html">Faults sheet</a>
+    <button type="button" class="icon-btn" id="settings-btn" aria-label="Settings: save to GitHub" aria-haspopup="dialog">
+      <span class="js-icon" data-icon="gear"></span>
+      <span class="dot" hidden></span>
+    </button>
+  </nav>
+</header>
+
+<main class="layout">
+  <section class="panel" id="panel" aria-label="Tips">
+    <button type="button" class="panel-grab" id="panel-grab" aria-label="Show more or fewer tips" aria-controls="panel-body" aria-expanded="false"><span></span></button>
+    <div class="panel-body" id="panel-body">
+      <p class="empty">Loading tips…</p>
+    </div>
+  </section>
+
+  <div class="map-wrap" id="map-wrap">
+    <div id="map" aria-label="Map of tips"></div>
+    <div class="map-actions" id="map-actions">
+      <button type="button" class="fab fab-round" id="locate-btn" aria-label="Where am I?" title="Where am I?"><span class="js-icon" data-icon="locate"></span></button>
+      <button type="button" class="fab fab-primary" id="drop-btn"><span class="js-icon" data-icon="plus"></span>Drop a pin</button>
+    </div>
+  </div>
+</main>
+
+<div class="toasts" id="toasts"></div>
+
+<dialog id="settings-dialog" aria-labelledby="settings-title">
+  <div class="dialog-inner">
+    <div class="dialog-head">
+      <div>
+        <span class="label label-accent">Settings</span>
+        <h2 id="settings-title">Save tips to GitHub</h2>
+      </div>
+      <button type="button" class="icon-btn" id="settings-close" aria-label="Close">✕</button>
+    </div>
+    <p class="lede">Saving commits <span class="mono">tips.json</span> to <span class="mono" id="repo-name"></span>. To do that the page needs a fine-grained GitHub token. It's kept in this browser on this device only.</p>
+    <ol class="steps">
+      <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → new fine-grained token</a> (Settings → Developer settings → Personal access tokens → Fine-grained tokens).</li>
+      <li>Name it something like <strong>Driving tips map</strong> and pick an expiry. You'll make a new one when it runs out.</li>
+      <li><strong>Repository access:</strong> “Only select repositories” → <span class="mono" id="repo-only"></span>.</li>
+      <li><strong>Permissions:</strong> Repository permissions → <strong>Contents: Read and write</strong>. Nothing else. (GitHub adds Metadata: read-only by itself.)</li>
+      <li>Generate it, copy it (it starts <span class="mono">github_pat_</span>) and paste it below.</li>
+    </ol>
+    <form id="token-form" class="form" autocomplete="off">
+      <div class="field">
+        <label for="token-input">Token</label>
+        <input id="token-input" name="token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…">
+      </div>
+      <p class="token-status" id="token-status" role="status"></p>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary" id="token-save">Save token</button>
+        <button type="button" class="btn btn-danger" id="token-forget">Forget token</button>
+      </div>
+    </form>
+    <p class="small">Without a token the map still works. Saving then keeps changes on this device and copies them as JSON, so you can paste them to Claude to commit. Anyone using this browser profile can use a saved token, so don't save it on a shared computer.</p>
+  </div>
+</dialog>
+
+<dialog id="copy-dialog" aria-labelledby="copy-title">
+  <div class="dialog-inner">
+    <div class="dialog-head">
+      <h2 id="copy-title">Copy this</h2>
+      <button type="button" class="icon-btn" id="copy-close" aria-label="Close">✕</button>
+    </div>
+    <p class="small">The browser didn't allow copying automatically. Select the text and copy it, then paste it to Claude.</p>
+    <textarea class="copy-box" id="copy-text" readonly></textarea>
+    <div class="btn-row"><button type="button" class="btn" id="copy-select">Select all</button></div>
+  </div>
+</dialog>
+
+<noscript><p class="map-fallback">This map needs JavaScript.</p></noscript>
+</body>
+</html>
