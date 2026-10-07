@@ -62,15 +62,17 @@ export class TipMap {
     }
   }
 
-  // Shows the pinned tips in `tips` (already numbered and filtered).
-  render(tips, selectedId) {
+  // Shows the pinned tips in `tips` (already numbered and filtered). Pins in
+  // `localIds` have changes only on this device and get a dashed outline.
+  render(tips, selectedId, localIds = new Set()) {
     const seen = new Set();
     for (const tip of tips) {
       if (!isPinned(tip)) continue;
       seen.add(tip.id);
       const selected = tip.id === selectedId;
       const moving = this.moving?.id === tip.id;
-      const className = [`cat-${tip.cat}`, tip.status === 'known' && 'is-known', selected && 'is-selected', moving && 'is-moving'].filter(Boolean).join(' ');
+      const local = localIds.has(tip.id);
+      const className = [`cat-${tip.cat}`, tip.status === 'known' && 'is-known', selected && 'is-selected', moving && 'is-moving', local && 'is-local'].filter(Boolean).join(' ');
       const key = `${tip.num}|${className}|${tip.where}`;
       let entry = this.markers.get(tip.id);
       if (!entry) {
@@ -86,7 +88,7 @@ export class TipMap {
         entry.marker.setIcon(pinIcon(this.L, { label: String(tip.num), className }));
         entry.marker.setZIndexOffset(selected || moving ? 1000 : 0);
         const el = entry.marker.getElement();
-        el.setAttribute('aria-label', `Tip ${tip.num}: ${tip.where}`);
+        el.setAttribute('aria-label', `Tip ${tip.num}: ${tip.where}${local ? ' (only on this device)' : ''}`);
         el.dataset.id = tip.id;
         entry.key = key;
       }

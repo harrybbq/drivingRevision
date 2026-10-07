@@ -86,7 +86,7 @@ function stateLine(entry) {
   if (!entry) return null;
   if (entry.state === 'saving') return h('span', { class: 'state' }, 'Saving to GitHub…');
   if (entry.state === 'committed') return h('span', { class: 'state' }, 'Saved · site updates in about a minute');
-  return h('span', { class: 'state state-local' }, 'Only on this phone');
+  return h('span', { class: 'state state-local' }, 'Only on this device');
 }
 
 function notify(message, options) {
@@ -94,10 +94,10 @@ function notify(message, options) {
 }
 
 // Copies inside the click that caused it (browsers only allow that), or shows the text to copy by hand.
-function copyOrShow(text, done) {
+function copyOrShow(text, done, doneOptions) {
   copyText(text).then((ok) => {
     if (ok) {
-      if (done) notify(done);
+      if (done) notify(done, doneOptions);
       return;
     }
     els.copyBox.value = text;
@@ -108,16 +108,24 @@ function copyOrShow(text, done) {
 
 // ---------------------------------------------------------------- saving
 
-// Every change goes through here. With a token it's committed; without one it
-// stays on this device and is copied as JSON to paste to Claude.
+// Every change goes through here. With a token it's committed, so every device
+// sees it; without one it stays on this device and is copied as JSON for Claude.
 function save(op) {
   if (!hasToken() && (op.type === 'upsert' || store.isServed(op.tip.id))) {
-    copyOrShow(
-      clipboardText([op]),
-      'Saved on this phone. Copied as JSON to paste to Claude.',
-    );
+    copyOrShow(clipboardText([op]), 'Saved on this device only. Copied as JSON for Claude.', {
+      action: { label: 'Save everywhere', onClick: openSettings },
+      ms: 8000,
+    });
   }
   return store.save(op);
+}
+
+// Pushes changes that are only on this device, once there's a token to do it with.
+function syncLocal() {
+  const waiting = store.entries('local').length;
+  if (!hasToken() || !waiting || navigator.onLine === false) return;
+  notify(`Saving ${plural(waiting, 'change', 'changes')} from this device to GitHub…`);
+  store.saveLocal();
 }
 
 store.subscribe((event) => {
@@ -131,7 +139,7 @@ store.subscribe((event) => {
     );
   } else if (event.type === 'save-error') {
     const auth = [401, 403, 404].includes(event.error.status);
-    notify(`Couldn't save to GitHub. ${event.error.message} The change is kept on this phone.`, {
+    notify(`Couldn't save to GitHub. ${event.error.message} The change is kept on this device.`, {
       error: true,
       ms: 10000,
       action: auth ? { label: 'Settings', onClick: openSettings } : null,
@@ -145,12 +153,26 @@ store.subscribe((event) => {
 
 function renderAll() {
   const tips = store.tips;
+  const localIds = new Set(store.entries('local').map((e) => e.op.tip.id));
   if (map) {
     const visible = filterTips(tips, ui.filter);
     const selected = tips.find((t) => t.id === ui.selectedId);
-    map.render(selected && !visible.includes(selected) ? [...visible, selected] : visible, ui.selectedId);
+    map.render(selected && !visible.includes(selected) ? [...visible, selected] : visible, ui.selectedId, localIds);
   }
+  renderSettingsBadge(localIds.size);
   if (ui.view === 'list' || ui.view === 'detail') renderPanel();
+}
+
+// The settings button shows how many changes haven't reached GitHub, else a dot when a token is set.
+function renderSettingsBadge(waiting) {
+  const count = els.settingsBtn.querySelector('.count');
+  count.textContent = String(waiting);
+  count.hidden = waiting === 0;
+  els.settingsBtn.querySelector('.dot').hidden = waiting > 0 || !hasToken();
+  els.settingsBtn.setAttribute(
+    'aria-label',
+    waiting ? `Settings: ${plural(waiting, 'change', 'changes')} only on this device` : 'Settings: save to GitHub',
+  );
 }
 
 function renderPanel() {
@@ -226,13 +248,13 @@ function listNotices() {
       h(
         'div',
         { class: 'notice notice-local' },
-        h('p', {}, `${plural(local.length, 'change is', 'changes are')} only on this phone.`),
+        h('p', {}, `${plural(local.length, 'change is', 'changes are')} only on this device. Other devices won't see ${local.length === 1 ? 'it' : 'them'} until ${local.length === 1 ? "it's" : "they're"} saved to GitHub.`),
         h(
           'div',
           { class: 'btn-row' },
           hasToken()
             ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => store.saveLocal() }, icon('upload'), 'Save to GitHub')
-            : h('button', { type: 'button', class: 'btn', onclick: openSettings }, 'Add a token'),
+            : h('button', { type: 'button', class: 'btn btn-primary', onclick: openSettings }, icon('upload'), 'Save everywhere'),
           h('button', { type: 'button', class: 'btn', onclick: () => copyOrShow(clipboardText(local.map((e) => e.op)), 'Copied as JSON. Paste it to Claude to commit it.') }, icon('copy'), 'Copy as JSON'),
         ),
       ),
@@ -344,7 +366,7 @@ function localNotice(tip, entry) {
   return h(
     'div',
     { class: 'notice notice-local' },
-    h('p', {}, entry.error ? `Not saved to GitHub: ${entry.error}` : 'This change is only on this phone.'),
+    h('p', {}, entry.error ? `Not saved to GitHub: ${entry.error}` : "This change is only on this device. Other devices won't see it yet."),
     ui.confirm === 'discard'
       ? h('div', { class: 'btn-row' },
           h('button', { type: 'button', class: 'btn', 'data-key': 'cancel-discard', onclick: () => setConfirm(null, 'discard') }, 'Keep change'),
@@ -661,8 +683,7 @@ async function whereAmI() {
 
 function applyToken(token) {
   store.commitText = token ? (args) => commitTextFile({ token, ...args }) : null;
-  els.settingsBtn.querySelector('.dot').hidden = !token;
-  if (ui.view === 'list' || ui.view === 'detail') renderPanel();
+  renderAll();
 }
 
 function setTokenStatus(text, kind = '') {
@@ -671,7 +692,10 @@ function setTokenStatus(text, kind = '') {
 }
 
 function openSettings() {
-  setTokenStatus(hasToken() ? 'A token is saved in this browser.' : 'No token saved: the map is read-only here.', hasToken() ? 'ok' : '');
+  setTokenStatus(
+    hasToken() ? 'A token is saved in this browser. Your changes here save for every device.' : 'No token on this device yet, so changes made here stay here.',
+    hasToken() ? 'ok' : '',
+  );
   els.tokenInput.value = '';
   els.settings.showModal();
 }
@@ -703,8 +727,7 @@ els.tokenForm.addEventListener('submit', async (e) => {
     !stored && "This browser won't store it, so you'll need to paste it again next time.",
   ];
   setTokenStatus(notes.filter(Boolean).join(' '), 'ok');
-  const local = store.entries('local').length;
-  if (local) notify(`${plural(local, 'change is', 'changes are')} waiting on this phone.`, { action: { label: 'Save to GitHub', onClick: () => store.saveLocal() }, ms: 10000 });
+  syncLocal();
 });
 
 $('token-forget').addEventListener('click', () => {
@@ -739,9 +762,11 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') store.load();
 });
+addEventListener('online', syncLocal); // retry saves that failed for lack of signal
 
 applyToken(readToken(storage));
 store.load().then(() => {
   // Open the list part-way if there's something to do in it.
   if (store.tips.some((t) => !isPinned(t)) || store.entries('local').length) sheet.set('half');
+  syncLocal(); // anything left over from last time, e.g. saved with no signal
 });
