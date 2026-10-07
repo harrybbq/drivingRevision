@@ -36,8 +36,8 @@
     "cat": "junction",
     "rule": "Heading towards High St: keep to the inner lane on the first roundabout and leave it in the second lane, so you approach the second roundabout in the right lane.",
     "why": "The left lane at the second roundabout is left turn only, into the bus terminal.",
-    "lat": null,
-    "lng": null,
+    "lat": 55.947839,
+    "lng": -4.764875,
     "status": "learning",
     "createdAt": "2026-10-07T00:16:32.099Z"
   },
@@ -46,8 +46,8 @@
     "where": "Broomberry Dr / Chapel St junction",
     "cat": "junction",
     "rule": "When told to follow the road to Greenock (A8): stay in the left lane along Broomberry Dr, then move into the right lane to turn right at the junction.",
-    "lat": null,
-    "lng": null,
+    "lat": 55.955727,
+    "lng": -4.812017,
     "status": "learning",
     "createdAt": "2026-10-07T00:22:51.760Z"
   },
@@ -57,8 +57,8 @@
     "cat": "junction",
     "rule": "Coming the other way, when told to turn left then left again: turn left into the short road in the left lane. If the road on your right is clear you can keep going and turn left again without stopping.",
     "why": "It is an open junction, so you can see the road on the right is clear as you approach.",
-    "lat": null,
-    "lng": null,
+    "lat": 55.955497,
+    "lng": -4.810052,
     "status": "learning",
     "createdAt": "2026-10-07T00:22:52.856Z"
   },
@@ -67,8 +67,8 @@
     "where": "Union St give way at Kilblain St",
     "cat": "junction",
     "rule": "Coming along Union St to the give way: drop your speed as if approaching a closed junction. Once stopped, look right for a gap, then pull off to the left.",
-    "lat": null,
-    "lng": null,
+    "lat": 55.950579,
+    "lng": -4.764806,
     "status": "learning",
     "createdAt": "2026-10-07T00:36:42.377Z"
   },
@@ -77,9 +77,29 @@
     "where": "Nelson St give way at Union St, by City Church",
     "cat": "junction",
     "rule": "Coming along Nelson St: pull up and stop at the give way, the same marking as at Kilblain St, and look right for a gap before turning left into Union St.",
-    "lat": null,
-    "lng": null,
+    "lat": 55.950003,
+    "lng": -4.764856,
     "status": "learning",
     "createdAt": "2026-10-07T00:36:43.435Z"
+  },
+  {
+    "id": "6wd108vb",
+    "where": "Ingleston Street",
+    "cat": "lanes",
+    "rule": "On approach to lights, stay left lane unless told to turn right in that case move to right lane.",
+    "lat": 55.941495,
+    "lng": -4.749652,
+    "status": "learning",
+    "createdAt": "2026-10-07T01:24:43.658Z"
+  },
+  {
+    "id": "ux34mngp",
+    "where": "Uneven lines",
+    "cat": "junction",
+    "rule": "Brougham street junction has weird road lines so if turning at junction, make sure to stay in lane",
+    "lat": 55.955097,
+    "lng": -4.768362,
+    "status": "learning",
+    "createdAt": "2026-10-07T01:26:34.465Z"
   }
 ]
