@@ -224,11 +224,13 @@ button{cursor:pointer;}
 }
 
 @media (min-width:900px){
-  .layout{display:grid;grid-template-columns:400px 1fr;}
+  /* minmax(0,1fr): the row is the window height, so the tip list scrolls instead of growing. */
+  .layout{display:grid;grid-template-columns:400px 1fr;grid-template-rows:minmax(0,1fr);}
   .panel{
     position:relative;
     inset:auto;
     height:auto;
+    min-height:0;
     border-top:0;
     border-right:1px solid var(--line);
     box-shadow:none;
@@ -350,7 +352,7 @@ button{cursor:pointer;}
 .filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
 .filters .count{font-family:var(--mono);font-weight:600;font-size:12px;opacity:.8;margin-left:4px;}
 @media (min-width:900px){
-  .filters{margin:-16px -20px 0;padding:16px 20px 12px;}
+  .filters{top:-16px;margin:-16px -20px 0;padding:16px 20px 12px;} /* covers the panel's top padding when stuck */
 }
 
 .tips{list-style:none;margin:0;padding:0;}
