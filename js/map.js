@@ -1,5 +1,6 @@
 // The Leaflet map: numbered pins, the draft pin for a new tip, placing and
-// moving pins, and "Where am I". It knows nothing about saving.
+// moving pins, the open tip's drawn marks, and "Where am I". It knows nothing
+// about saving.
 
 import { svg, prefersReducedMotion } from './dom.js';
 import { isPinned } from './tips.js';
@@ -7,6 +8,10 @@ import { isPinned } from './tips.js';
 export const START = { lat: 55.955, lng: -4.78, zoom: 14 };
 const DESKTOP = '(min-width: 900px)';
 const FOCUS_ZOOM = 16;
+// Marks look like red pen on a screenshot: red over a white casing, so they
+// read on light and dark tiles alike. Keep in step with --mark in app.css.
+const RED = '#D7261E';
+const CASING = '#FFFFFF';
 
 // A teardrop with the number in the round part. Built with DOM calls, not HTML strings.
 function pinSvg(label) {
@@ -23,6 +28,59 @@ function pinIcon(L, { label, className }) {
   return L.divIcon({ html: pinSvg(label), className: `pin ${className}`, iconSize: [44, 52], iconAnchor: [22, 50] });
 }
 
+// Arrowhead size on screen, in pixels. The line stops partway into the head, so
+// its round end never shows past the tip.
+const HEAD = { length: 20, halfWidth: 9, cut: 12 };
+
+// Cuts `len` pixels off the end of a line of projected points.
+function trimEnd(px, len) {
+  const out = px.slice();
+  let left = len;
+  while (out.length > 1) {
+    const end = out.at(-1);
+    const prev = out.at(-2);
+    const d = end.distanceTo(prev);
+    if (d > left) {
+      out[out.length - 1] = end.add(prev.subtract(end).multiplyBy(left / d));
+      return out;
+    }
+    left -= d;
+    out.pop();
+  }
+  return out;
+}
+
+// The shaft and head of an arrow at zoom z. Both are worked out in screen pixels,
+// so the head points along the last stretch of road and keeps its size.
+function arrowShape(map, points, z) {
+  const px = points.map((p) => map.project(p, z));
+  const tip = px.at(-1);
+  // The last point that's somewhere else, so tapping one spot twice doesn't spin the head.
+  const from = px.slice(0, -1).reverse().find((p) => p.distanceTo(tip) > 0.5);
+  if (!from) return { shaft: points, head: [] };
+  const d = tip.distanceTo(from);
+  const ux = (tip.x - from.x) / d;
+  const uy = (tip.y - from.y) / d;
+  const base = tip.subtract([ux * HEAD.length, uy * HEAD.length]);
+  const side = [-uy * HEAD.halfWidth, ux * HEAD.halfWidth];
+  const head = [tip, base.add(side), base.subtract(side)];
+  const toLatLng = (p) => map.unproject(p, z);
+  return { shaft: trimEnd(px, HEAD.cut).map(toLatLng), head: head.map(toLatLng) };
+}
+
+// An S-shaped arrow shifting up and to the right; CSS mirrors it for "left".
+function laneSvg() {
+  return svg(
+    'svg',
+    { viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': 'true', focusable: 'false' },
+    svg('path', { d: 'M8 21v-4c0-3.5 8-4.5 8-8V4' }),
+    svg('path', { d: 'M12 7.5L16 3.5l4 4' }),
+  );
+}
+
+// Every [lat, lng] a mark covers, for fitting the view to a drawing.
+const markPoints = (marks = []) => marks.flatMap((m) => m.points ?? [m.at]);
+
 export class TipMap {
   constructor(el, wrap, { onSelect }) {
     const L = globalThis.L;
@@ -33,9 +91,18 @@ export class TipMap {
     this.moving = null;
     this.placing = null;
     this.draft = null;
+    this.drawing = null;
     this.you = null;
 
     this.map = L.map(el, { attributionControl: false, zoomSnap: 0.5 }).setView([START.lat, START.lng], START.zoom);
+    // Marks sit above the tiles but below the pins (600), and never take taps.
+    // The pane's renderer is made now so its <svg> comes before any marker icons.
+    this.map.createPane('marks').style.zIndex = 450;
+    this.marksRenderer = L.svg({ pane: 'marks' }).addTo(this.map);
+    this.marks = L.layerGroup().addTo(this.map);
+    this.marksKey = '';
+    this.arrows = []; // { points, layers } for reshaping arrowheads when the zoom changes
+    this.map.on('zoomend', () => this.shapeArrows());
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -53,7 +120,9 @@ export class TipMap {
   }
 
   handleClick(e) {
-    if (this.placing) {
+    if (this.drawing) {
+      this.drawing({ lat: e.latlng.lat, lng: e.latlng.lng });
+    } else if (this.placing) {
       const done = this.placing;
       this.stopPlacing();
       done({ lat: e.latlng.lat, lng: e.latlng.lng });
@@ -78,7 +147,7 @@ export class TipMap {
       if (!entry) {
         const marker = this.L.marker([tip.lat, tip.lng], { keyboard: true, riseOnHover: true }).addTo(this.map);
         marker.on('click', () => {
-          if (!this.placing && !this.moving) this.onSelect(tip.id);
+          if (!this.placing && !this.moving && !this.drawing) this.onSelect(tip.id);
         });
         entry = { marker, key: '' };
         this.markers.set(tip.id, entry);
@@ -107,6 +176,116 @@ export class TipMap {
     const target = this.map.unproject(point, zoom);
     if (prefersReducedMotion()) this.map.setView(target, zoom);
     else this.map.flyTo(target, zoom, { duration: 0.7 });
+  }
+
+  // Opens a tip with a drawing: fits the pin and every mark into the part of the
+  // map the sheet doesn't cover. A tip with nothing drawn is just centred.
+  fitTip(tip, covered = 0) {
+    const points = markPoints(tip.marks);
+    if (!points.length) {
+      this.focus(tip, covered);
+      return;
+    }
+    const bounds = this.L.latLngBounds([[tip.lat, tip.lng], ...points]);
+    const options = { paddingTopLeft: [48, 48], paddingBottomRight: [48, covered + 48], maxZoom: 18 };
+    if (prefersReducedMotion()) this.map.fitBounds(bounds, options);
+    else this.map.flyToBounds(bounds, { ...options, duration: 0.7 });
+  }
+
+  // ------------------------------------------------------ drawn marks
+
+  // Draws one tip's marks, plus `pending`: the points tapped so far for an arrow
+  // or give-way line that isn't finished. The page re-renders on every poll, so
+  // nothing is redrawn unless something changed.
+  showMarks(marks, { pending = [] } = {}) {
+    const key = JSON.stringify([marks, pending]);
+    if (key === this.marksKey) return;
+    this.marks.clearLayers();
+    this.marksKey = key;
+    this.arrows = [];
+    const L = this.L;
+    const base = { pane: 'marks', renderer: this.marksRenderer, interactive: false, opacity: 1, lineCap: 'round', lineJoin: 'round' };
+    const add = (layer) => layer.addTo(this.marks);
+    const casing = (className) => ({ ...base, className, color: CASING, weight: 9 });
+    const red = (className) => ({ ...base, className, color: RED, weight: 5 });
+
+    // Every white casing goes under every red line, so the marks read as one pen
+    // stroke with a white edge, arrowheads included.
+    const casings = [];
+    const reds = [];
+    for (const mark of marks) {
+      if (mark.type === 'arrow') {
+        const arrow = { points: mark.points, layers: [] };
+        arrow.layers.push(
+          L.polyline([], casing('mark-casing')),
+          L.polygon([], { ...casing('mark-head-casing'), weight: 4, fillColor: CASING, fillOpacity: 1 }),
+          L.polyline([], red('mark-arrow')),
+          L.polygon([], { ...red('mark-head'), stroke: false, fillColor: RED, fillOpacity: 1 }),
+        );
+        casings.push(arrow.layers[0], arrow.layers[1]);
+        reds.push(arrow.layers[2], arrow.layers[3]);
+        this.arrows.push(arrow);
+      } else if (mark.type === 'giveway') {
+        // Dashed like give-way road markings.
+        casings.push(L.polyline(mark.points, casing('mark-casing')));
+        reds.push(L.polyline(mark.points, { ...red('mark-giveway'), dashArray: '8 7', lineCap: 'butt' }));
+      }
+    }
+    this.shapeArrows();
+    [...casings, ...reds].forEach(add);
+
+    // Symbols go over the lines.
+    const icon = (at, className, html, size) =>
+      add(L.marker(at, { pane: 'marks', interactive: false, keyboard: false, icon: L.divIcon({ className, html, iconSize: size }) }));
+    for (const mark of marks) {
+      if (mark.type === 'lane') {
+        icon(mark.at, 'mark-lane', laneSvg(), [32, 32]).getElement().setAttribute('data-dir', mark.dir === 'left' ? 'left' : 'right');
+      } else if (mark.type === 'label') {
+        const text = document.createElement('span');
+        text.textContent = mark.text; // typed by the user: text only, never HTML
+        icon(mark.at, 'mark-label', text, null);
+      }
+    }
+
+    // The arrow or give-way line being drawn: a dot per tap, joined by a dashed preview.
+    if (pending.length > 1) add(L.polyline(pending, { ...base, className: 'mark-preview', color: RED, weight: 3, opacity: 0.9, dashArray: '4 6' }));
+    for (const point of pending) {
+      add(L.circleMarker(point, { ...base, className: 'mark-point', radius: 6, color: CASING, weight: 2, fillColor: RED, fillOpacity: 1 }));
+    }
+  }
+
+  clearMarks() {
+    if (!this.marksKey) return;
+    this.marks.clearLayers();
+    this.marksKey = '';
+    this.arrows = [];
+  }
+
+  // Arrowheads stay the same size on screen, so they're reshaped at each new zoom.
+  shapeArrows() {
+    const z = this.map.getZoom();
+    for (const { points, layers } of this.arrows) {
+      const { shaft, head } = arrowShape(this.map, points, z);
+      const [shaftCasing, headCasing, shaftRed, headRed] = layers;
+      shaftCasing.setLatLngs(shaft);
+      shaftRed.setLatLngs(shaft);
+      headCasing.setLatLngs(head);
+      headRed.setLatLngs(head);
+    }
+  }
+
+  // Draw mode: every map tap goes to onTap, and pins let taps through.
+  startDrawing(onTap) {
+    this.drawing = onTap;
+    this.wrap.classList.add('is-placing');
+    this.map.doubleClickZoom.disable(); // quick taps along a road shouldn't zoom
+  }
+
+  stopDrawing() {
+    if (!this.drawing) return;
+    this.drawing = null;
+    this.wrap.classList.remove('is-placing');
+    this.map.doubleClickZoom.enable();
   }
 
   // ------------------------------------------------- placing a new pin

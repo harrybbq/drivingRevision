@@ -44,6 +44,9 @@ const ICONS = {
   trash: ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 13h10l1-13', 'M9 7V4h6v3'],
   copy: ['M9 9h11v11H9z', 'M5 15H4V4h11v1'],
   upload: ['M12 16V4', 'M7 9l5-5l5 5', 'M4 20h16'],
+  // A hand-drawn arrow, for drawing on the map.
+  draw: ['M4 20c1.5-4.5 4.5-6 8-7s6.5-3 8-8.5', 'M15 5.5l5-1.5l1.5 5'],
+  undo: ['M9 14L4 9l5-5', 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11'],
 };
 
 export function icon(name) {

@@ -1,10 +1,10 @@
 // The map page: wires the tip store, the map, the panel (list / detail / form /
-// pin prompts) and the settings dialog together. All data goes into the page as
+// pin prompts / drawing) and the settings dialog together. All data goes into the page as
 // text through h() from dom.js.
 
 import { REPO } from './config.js';
 import {
-  TipStore, FILTERS, CATEGORIES, LIMITS, categoryLabel, countTips, filterTips, isPinned,
+  TipStore, FILTERS, CATEGORIES, LIMITS, MARK_LIMITS, categoryLabel, countTips, filterTips, isPinned,
   fieldErrors, newTip, updateTip, sameTip, upsertOp, deleteOp, clipboardText,
 } from './tips.js';
 import { readToken, saveToken, forgetToken, commitTextFile, checkToken, tokenKind } from './github.js';
@@ -38,7 +38,7 @@ const FILTER_KEY = 'drivingRevision:filter';
 const store = new TipStore({ storage });
 
 // What the panel is showing:
-//   list | detail (selectedId) | form (form) | place (mode: new or pin) | move (mode)
+//   list | detail (selectedId) | form (form) | place (mode: new or pin) | move (mode) | draw (draw)
 const ui = {
   view: 'list',
   filter: readFilter(),
@@ -46,6 +46,9 @@ const ui = {
   confirm: null, // 'delete' | 'discard' while the detail view asks to confirm
   form: null, // { id: string|null, lat, lng }
   mode: null, // { kind: 'new' } | { kind: 'pin', id } | { kind: 'move', id }
+  // The drawing being made, kept apart from the tip until it's saved:
+  // { id, marks, pending: [[lat, lng]…], tool, labelText, confirmClear }
+  draw: null,
 };
 let lastView = null;
 let focusNext = null; // data-key to focus after the next panel render
@@ -158,9 +161,26 @@ function renderAll() {
     const visible = filterTips(tips, ui.filter);
     const selected = tips.find((t) => t.id === ui.selectedId);
     map.render(selected && !visible.includes(selected) ? [...visible, selected] : visible, ui.selectedId, localIds);
+    syncMarks();
+    // Drop a pin would throw the drawing away, and the buttons cover the map being drawn on.
+    els.mapActions.hidden = ui.view === 'draw';
   }
   renderSettingsBadge(localIds.size);
   if (ui.view === 'list' || ui.view === 'detail') renderPanel();
+}
+
+// A tip's arrows and symbols show only while that tip is open, being moved or
+// being drawn on. Everywhere else the map is left clean.
+function syncMarks() {
+  if (!map) return;
+  if (ui.view === 'draw' && ui.draw) {
+    map.showMarks(ui.draw.marks, { pending: ui.draw.pending });
+    return;
+  }
+  const id = ui.view === 'detail' ? ui.selectedId : ui.view === 'move' ? ui.mode?.id : null;
+  const marks = (id && findTip(id)?.marks) || [];
+  if (marks.length) map.showMarks(marks);
+  else map.clearMarks();
 }
 
 // The settings button shows how many changes haven't reached GitHub, else a dot when a token is set.
@@ -182,12 +202,14 @@ function renderPanel() {
   const active = document.activeElement;
   const focusKey = focusNext ?? (body.contains(active) ? active.closest('[data-key]')?.dataset.key : null);
   focusNext = null;
-  const view = { list: listView, detail: detailView, form: formView, place: placeView, move: moveView }[ui.view];
+  const view = { list: listView, detail: detailView, form: formView, place: placeView, move: moveView, draw: drawView }[ui.view];
   body.replaceChildren(view());
   lastView = ui.view;
   body.scrollTop = sameView ? scroll : 0;
   if (focusKey) body.querySelector(`[data-key="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: sameView });
-  if (ui.view === 'place' || ui.view === 'move') {
+  // Re-fit only on the way in, or while still fitted: a sheet dragged out of the
+  // way stays put as the drawing changes.
+  if ((ui.view === 'place' || ui.view === 'move' || ui.view === 'draw') && (!sameView || sheet.state === 'fit')) {
     // Size the sheet to the prompt itself (the scroll box is never shorter than the sheet).
     const style = getComputedStyle(body);
     const content = body.firstElementChild.getBoundingClientRect().height + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
@@ -322,6 +344,7 @@ function detailView() {
   const known = tip.status === 'known';
   const pinned = isPinned(tip);
   const entry = store.pending.get(tip.id);
+  const drawn = tip.marks?.length ?? 0;
   const action = (label, iconName, onclick, extra = {}) =>
     h('button', { type: 'button', class: 'btn', onclick, ...extra }, icon(iconName), label);
 
@@ -356,9 +379,10 @@ function detailView() {
             h('button', { type: 'button', class: 'btn btn-danger-solid', 'data-key': 'confirm-delete', onclick: () => removeTip(tip.id) }, 'Delete tip')))
       : h('div', { class: 'btn-row' },
           action('Edit', 'edit', () => openEditForm(tip.id), { 'data-key': 'edit' }),
+          pinned && map && action(drawn ? 'Edit drawing' : 'Draw on map', 'draw', () => startDraw(tip.id), { 'data-key': 'draw' }),
           pinned && map && action('Move pin', 'move', () => startMove(tip.id), { 'data-key': 'move' }),
           action('Delete', 'trash', () => setConfirm('delete', 'cancel-delete'), { class: 'btn btn-danger', 'data-key': 'delete' })),
-    h('p', { class: 'meta' }, `Added ${formatDate(tip.createdAt)}`),
+    h('p', { class: 'meta' }, `Added ${formatDate(tip.createdAt)}${drawn ? ` · ${plural(drawn, 'mark', 'marks')} drawn on the map` : ''}`),
   );
 }
 
@@ -516,7 +540,9 @@ function moveView() {
 function stopModes() {
   map?.stopPlacing();
   map?.stopMoving(false);
+  map?.stopDrawing();
   map?.clearDraft();
+  ui.draw = null;
 }
 
 function setView(view, extra = {}) {
@@ -582,10 +608,169 @@ function cancelMode() {
   else backToList();
 }
 
+// ------------------------------------------------------------- drawing
+
+const TOOLS = [
+  { key: 'arrow', label: 'Arrow', hint: 'Tap along the road, then Finish arrow.' },
+  { key: 'giveway', label: 'Give way', hint: 'Tap one side of the road, then the other.' },
+  { key: 'lane-left', label: '← Lane', title: 'Change lanes to the left', hint: 'Tap where to change lanes.' },
+  { key: 'lane-right', label: 'Lane →', title: 'Change lanes to the right', hint: 'Tap where to change lanes.' },
+  { key: 'label', label: 'Label', hint: 'Type the label, then tap where it goes.' },
+];
+
+const round6 = (n) => Math.round(n * 1e6) / 1e6; // as tips.js stores positions
+const cleanLabel = (text) => text.replace(/\s+/g, ' ').trim().slice(0, MARK_LIMITS.label);
+
+function drawView() {
+  const d = ui.draw;
+  const tip = findTip(d.id);
+  const tool = TOOLS.find((t) => t.key === d.tool);
+  const canUndo = d.pending.length > 0 || d.marks.length > 0;
+  const finishable = d.tool === 'arrow' && d.pending.length >= 2;
+  const count = d.marks.length + (finishable ? 1 : 0);
+  return h(
+    'div',
+    { class: 'mode draw' },
+    h('span', { class: 'label' }, `Drawing on tip ${tip?.num ?? ''} · ${plural(count, 'mark', 'marks')}`),
+    h('p', { role: 'status' }, tool.hint),
+    h('div', { class: 'tools', role: 'group', 'aria-label': 'Draw' },
+      TOOLS.map((t) =>
+        h('button', { type: 'button', class: 'tool', 'data-tool': t.key, 'data-key': `tool-${t.key}`, title: t.title, 'aria-pressed': String(t.key === d.tool), onclick: () => setTool(t.key) }, t.label))),
+    d.tool === 'label' && h('div', { class: 'field' },
+      h('label', { class: 'visually-hidden', for: 'f-label' }, 'Label text'),
+      h('input', {
+        id: 'f-label', type: 'text', maxlength: MARK_LIMITS.label, value: d.labelText, autocomplete: 'off', enterkeyhint: 'done',
+        placeholder: 'Label text, e.g. Signal here', 'data-key': 'label',
+        oninput: (e) => { d.labelText = e.target.value; },
+      })),
+    d.confirmClear
+      ? h('div', { class: 'confirm', role: 'group', 'aria-label': 'Confirm clear' },
+          h('p', {}, 'Clear everything drawn on this tip? Nothing changes until you save.'),
+          h('div', { class: 'btn-row' },
+            h('button', { type: 'button', class: 'btn', 'data-key': 'cancel-clear', onclick: () => setClearConfirm(false) }, 'Keep it'),
+            h('button', { type: 'button', class: 'btn btn-danger-solid', 'data-key': 'confirm-clear', onclick: clearDrawing }, 'Clear all')))
+      : h('div', { class: 'btn-row' },
+          h('button', { type: 'button', class: 'btn', 'data-key': 'undo', disabled: !canUndo, onclick: undoDraw }, icon('undo'), 'Undo'),
+          finishable && h('button', { type: 'button', class: 'btn', 'data-key': 'finish', onclick: () => { finishPending(d); focusNext = 'tool-arrow'; renderDraw(); } }, icon('check'), 'Finish arrow'),
+          h('button', { type: 'button', class: 'btn btn-danger', 'data-key': 'clear', disabled: !canUndo, onclick: () => setClearConfirm(true) }, 'Clear all')),
+    h('div', { class: 'btn-row' },
+      h('button', { type: 'button', class: 'btn', 'data-key': 'cancel', onclick: cancelDraw }, 'Cancel'),
+      h('button', { type: 'button', class: 'btn btn-primary', 'data-key': 'save-drawing', onclick: saveDrawing }, 'Save drawing')),
+  );
+}
+
+// The draft changed: redraw it on the map and refresh the panel.
+function renderDraw() {
+  syncMarks();
+  renderPanel();
+}
+
+function startDraw(id) {
+  const tip = findTip(id);
+  if (!tip || !isPinned(tip) || !map) return;
+  stopModes();
+  ui.draw = { id, marks: structuredClone(tip.marks ?? []), pending: [], tool: 'arrow', labelText: '', confirmClear: false };
+  map.startDrawing(drawTap);
+  focusNext = 'tool-arrow';
+  setView('draw', { selectedId: id, mode: null });
+  map.focus(tip, sheet.covered(), Math.max(map.map.getZoom(), 18));
+}
+
+// Turns the points tapped so far into an arrow. One point isn't a line, so it's dropped.
+function finishPending(d) {
+  if (d.tool === 'arrow' && d.pending.length >= 2) d.marks.push({ type: 'arrow', points: d.pending });
+  d.pending = [];
+}
+
+function drawTap({ lat, lng }) {
+  const d = ui.draw;
+  if (!d) return;
+  const at = [round6(lat), round6(lng)];
+  // Starting a new mark needs room for it; finishing one already started doesn't.
+  if (!d.pending.length && d.marks.length >= MARK_LIMITS.marks) {
+    notify(`That's the most one tip can hold (${MARK_LIMITS.marks} marks). Undo or clear some to add more.`, { error: true });
+    return;
+  }
+  if (d.tool === 'arrow') {
+    d.pending.push(at);
+    if (d.pending.length >= MARK_LIMITS.points) finishPending(d);
+  } else if (d.tool === 'giveway') {
+    d.pending.push(at);
+    if (d.pending.length === 2) {
+      d.marks.push({ type: 'giveway', points: d.pending });
+      d.pending = [];
+    }
+  } else if (d.tool === 'label') {
+    const text = cleanLabel(d.labelText);
+    if (!text) {
+      notify('Type the label text first.');
+      els.body.querySelector('#f-label')?.focus();
+      return;
+    }
+    d.marks.push({ type: 'label', text, at });
+    d.labelText = '';
+  } else {
+    d.marks.push({ type: 'lane', dir: d.tool === 'lane-left' ? 'left' : 'right', at });
+  }
+  d.confirmClear = false;
+  renderDraw();
+}
+
+function setTool(tool) {
+  const d = ui.draw;
+  if (d.tool !== tool) finishPending(d);
+  d.tool = tool;
+  d.confirmClear = false;
+  focusNext = tool === 'label' ? 'label' : `tool-${tool}`;
+  renderDraw();
+}
+
+function undoDraw() {
+  const d = ui.draw;
+  if (d.pending.length) d.pending.pop();
+  else d.marks.pop();
+  if (!d.pending.length && !d.marks.length) focusNext = `tool-${d.tool}`; // Undo is now disabled
+  renderDraw();
+}
+
+function setClearConfirm(on) {
+  ui.draw.confirmClear = on;
+  focusNext = on ? 'cancel-clear' : 'clear';
+  renderDraw();
+}
+
+function clearDrawing() {
+  const d = ui.draw;
+  Object.assign(d, { marks: [], pending: [], confirmClear: false });
+  focusNext = `tool-${d.tool}`;
+  renderDraw();
+}
+
+function cancelDraw() {
+  const id = ui.draw?.id;
+  stopModes();
+  if (id && findTip(id)) showTip(id);
+  else backToList();
+}
+
+function saveDrawing() {
+  const d = ui.draw;
+  finishPending(d);
+  stopModes();
+  const tip = findTip(d.id);
+  if (!tip) {
+    notify('That tip was deleted.', { error: true });
+    backToList();
+    return;
+  }
+  if (JSON.stringify(d.marks) !== JSON.stringify(tip.marks ?? [])) save(upsertOp(updateTip(tip, { marks: d.marks }), 'draw'));
+  showTip(d.id);
+}
+
 // --------------------------------------------------- navigation actions
 
 function openTip(id) {
-  if (ui.view === 'form' || ui.view === 'place' || ui.view === 'move') return;
+  if (ui.view === 'form' || ui.view === 'place' || ui.view === 'move' || ui.view === 'draw') return;
   showTip(id);
 }
 
@@ -596,7 +781,9 @@ function showTip(id) {
   const pinned = tip && isPinned(tip) && map;
   // Half height leaves room to see the pin; an unpinned tip only needs the sheet open.
   if (pinned || sheet.state === 'peek' || sheet.state === 'fit') sheet.set('half');
-  if (pinned) map.focus(tip, sheet.covered());
+  // With a drawing, show all of it; otherwise just centre the pin.
+  if (pinned && tip.marks?.length) map.fitTip(tip, sheet.covered());
+  else if (pinned) map.focus(tip, sheet.covered());
 }
 
 function backToList() {
@@ -756,6 +943,7 @@ els.locateBtn.addEventListener('click', whereAmI);
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   if (ui.view === 'place' || ui.view === 'move') cancelMode();
+  else if (ui.view === 'draw') cancelDraw();
   else if (ui.view === 'form') cancelForm();
   else if (ui.view === 'detail') backToList();
 });

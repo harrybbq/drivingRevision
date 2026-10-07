@@ -27,6 +27,11 @@
   --cat-manoeuvre:#0E7C86;
   --cat-other:#4B5563;
 
+  /* Marks drawn on a tip: red pen on a white casing, the same in both themes. Keep in step with RED in map.js. */
+  --mark:#D7261E;
+  --mark-casing:#FFFFFF;
+  --mark-ink:#151A16;
+
   --header-h:56px;
   --sheet-h:148px;
   color-scheme:light;
@@ -491,6 +496,30 @@ button{cursor:pointer;}
 .mode p{margin:0;font-weight:700;font-size:16px;line-height:1.3;}
 .mode .btn-row .btn{flex:1 1 0;}
 
+/* ---------- draw mode ---------- */
+.tools{display:flex;flex-wrap:wrap;gap:6px;}
+.tool{
+  flex:1 1 auto;
+  min-height:44px;
+  min-width:44px;
+  padding:0 8px;
+  border:1px solid var(--line);
+  border-radius:2px;
+  background:var(--surface);
+  color:var(--ink);
+  font-size:14px;
+  font-weight:700;
+  line-height:1.15;
+  white-space:nowrap;
+}
+.tool:hover{border-color:var(--ink-muted);}
+.tool[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
+.draw .confirm p{font-weight:400;font-size:15.5px;line-height:1.45;}
+/* Buttons keep to one line and share the row; one that doesn't fit moves down. */
+.draw .btn-row .btn{flex:1 1 auto;white-space:nowrap;padding-inline:12px;}
+.btn:disabled{opacity:.45;cursor:default;}
+.btn:disabled:hover{border-color:var(--line);}
+
 /* ---------- form ---------- */
 .form{display:flex;flex-direction:column;gap:18px;}
 .form h2{margin:0;font-size:21px;font-weight:700;letter-spacing:-.015em;}
@@ -546,6 +575,36 @@ button{cursor:pointer;}
 .pin.is-moving svg{transform:scale(1.22) translateY(-4px);}
 .map-wrap.is-placing #map{cursor:crosshair;}
 .map-wrap.is-placing .leaflet-marker-icon.leaflet-interactive{pointer-events:none;}
+/* Drawn marks never take taps. Lane and label symbols go over the lines: Leaflet
+   stacks its line <svg> at 200, and each icon by its screen y, which goes
+   negative after panning north. */
+.leaflet-marks-pane{pointer-events:none;}
+.leaflet-marks-pane > svg{z-index:0;}
+.leaflet-marks-pane .leaflet-marker-icon{z-index:1 !important;}
+.mark-lane{
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:var(--mark);
+  box-shadow:0 0 0 2.5px var(--mark-casing),0 1px 4px 2px rgba(0,0,0,.3);
+}
+.mark-lane svg{width:22px;height:22px;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;}
+.mark-lane[data-dir="left"] svg{transform:scaleX(-1);}
+.mark-label span{
+  display:inline-block;
+  transform:translate(-50%,-50%); /* centred on the point; Leaflet's own transform is on the parent */
+  padding:2px 8px 1px;
+  border:2px solid var(--mark);
+  border-radius:999px;
+  background:var(--mark-casing);
+  color:var(--mark-ink);
+  font-family:var(--sans);
+  font-size:12.5px;
+  font-weight:700;
+  line-height:1.3;
+  white-space:nowrap;
+  box-shadow:0 1px 3px rgba(0,0,0,.3);
+}
 .leaflet-marker-icon.pin:focus-visible{outline:none;}
 .leaflet-marker-icon.pin:focus-visible svg{outline:2px solid var(--accent);outline-offset:3px;}
 
