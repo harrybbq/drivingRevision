@@ -101,5 +101,15 @@
     "lng": -4.768362,
     "status": "learning",
     "createdAt": "2026-10-07T01:26:34.465Z"
+  },
+  {
+    "id": "4cpsk9eg",
+    "where": "Inverkip Road becomes 2 lanes",
+    "cat": "lanes",
+    "rule": "When the road expands into 2 lanes, stay in left lane unless turning right at roundabout ahead.",
+    "lat": 55.940621,
+    "lng": -4.788555,
+    "status": "learning",
+    "createdAt": "2026-10-07T01:30:31.119Z"
   }
 ]
