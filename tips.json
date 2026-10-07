@@ -29,5 +29,16 @@
     "lng": null,
     "status": "learning",
     "createdAt": "2026-10-07T00:12:00.000Z"
+  },
+  {
+    "id": "ucdq6umb",
+    "where": "Inverkip St, two roundabouts towards High St",
+    "cat": "junction",
+    "rule": "Heading towards High St: keep to the inner lane on the first roundabout and leave it in the second lane, so you approach the second roundabout in the right lane.",
+    "why": "The left lane at the second roundabout is left turn only, into the bus terminal.",
+    "lat": null,
+    "lng": null,
+    "status": "learning",
+    "createdAt": "2026-10-07T00:16:32.099Z"
   }
 ]
