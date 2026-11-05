@@ -1,0 +1,64 @@
+/* The test route page. Builds on app.css (tokens, header, layout, sheet). */
+:root{--route:#1F5FAD;}
+
+.route-head{display:flex;flex-direction:column;gap:6px;padding:2px 0 12px;}
+.route-head h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.015em;line-height:1.2;}
+.route-key{margin:0;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-muted);}
+.route-status{margin:0;font-family:var(--serif);font-size:15px;line-height:1.45;color:var(--ink-muted);}
+.route-status.bad{color:var(--flag);}
+.route-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 6px;}
+
+.route-steps{list-style:none;margin:0;padding:0;border-top:1px solid var(--line-soft);}
+.route-step{border-bottom:1px solid var(--line-soft);}
+.route-step.is-selected{background:var(--accent-soft);margin-inline:-16px;padding-inline:16px;}
+@media (min-width:900px){.route-step.is-selected{margin-inline:-20px;padding-inline:20px;}}
+.step-main{
+  display:grid;
+  grid-template-columns:30px 1fr;
+  column-gap:12px;
+  align-items:center;
+  width:100%;
+  min-height:44px;
+  padding:9px 0;
+  background:none;
+  border:0;
+  text-align:left;
+}
+.route-step .num{
+  grid-row:span 2;
+  display:grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  background:var(--route);
+  color:#fff;
+  font-family:var(--mono);
+  font-size:12.5px;
+  font-weight:600;
+}
+.route-step.is-unplaced .num{background:var(--surface-2);color:var(--ink-muted);box-shadow:inset 0 0 0 1px var(--line);}
+.route-step .road{font-size:16px;font-weight:700;line-height:1.25;}
+.route-step .dir{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--ink-muted);}
+.route-step .note{grid-column:2;margin-top:4px;font-family:var(--serif);font-size:14px;line-height:1.4;color:var(--flag);}
+
+/* Numbered turns on the map. */
+.turn-icon{display:grid;place-items:center;}
+.turn{
+  display:grid;
+  place-items:center;
+  min-width:28px;
+  height:28px;
+  padding:0 6px;
+  border-radius:14px;
+  background:var(--route);
+  color:#fff;
+  border:2px solid #fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.45);
+  font-family:var(--mono);
+  font-size:12.5px;
+  font-weight:600;
+  transition:transform .15s ease;
+}
+.turn.is-approx{border-style:dashed;}
+.turn.is-selected{transform:scale(1.3);background:var(--ink);color:var(--ground);}
