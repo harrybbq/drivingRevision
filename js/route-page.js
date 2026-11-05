@@ -119,6 +119,7 @@ function render() {
   body.replaceChildren(
     h('div', { class: 'route-head' },
       h('h2', {}, ROUTE.title),
+      h('p', { class: 'route-status' }, `Starts and ends at ${ROUTE.start.name}, ${ROUTE.start.address}.`),
       h('p', { class: 'route-key' }, 'T/L traffic lights · EOR end of road'),
       statusLine()),
     h('div', { class: 'route-actions' },
@@ -154,7 +155,7 @@ async function fetchOsm(query) {
 }
 
 // The cached result is only reused for exactly the same route.
-const signature = JSON.stringify(ROUTE.steps.map((s) => s.names));
+const signature = JSON.stringify({ names: ROUTE.steps.map((s) => s.names), start: ROUTE.start });
 
 function readCache() {
   try {
@@ -186,7 +187,7 @@ async function load({ fresh = false } = {}) {
   render();
   try {
     const osm = await fetchOsm(overpassQuery(ROUTE.steps));
-    result = solveRoute(ROUTE.steps, osm);
+    result = solveRoute(ROUTE.steps, osm, { start: ROUTE.start });
     if (result.markers.length) writeCache(result);
     state = { loading: false, error: null, selected: null };
   } catch (err) {

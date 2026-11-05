@@ -158,3 +158,24 @@ test('the real route data is well formed', () => {
   assert.ok(r.problems.length > 0, 'with no data, every street is reported missing');
   assert.deepEqual(r.markers, []);
 });
+
+test('the given test centre is used when the map data has none, or only a far-off "test centre"', () => {
+  const given = { name: 'Greenock Driving Test Centre', at: [55.9501, -4.7801] };
+  const streets = [
+    way('Alpha Street', [[55.95, -4.78], [55.95, -4.776], [55.95, -4.772]]),
+    way('Beta Street', [[55.95, -4.772], [55.952, -4.772]]),
+  ];
+  const steps = [step('DTC'), step('A', 'Alpha Street'), step('B', 'Beta Street')];
+  const none = solveRoute(steps, osm(...streets), { start: given });
+  close(markerFor(none, 0).at, given.at);
+  const farOff = solveRoute(steps, osm(...streets, { type: 'node', lat: 55.96, lon: -4.75, tags: { name: 'Quick MOT Test Centre' } }), { start: given });
+  close(markerFor(farOff, 0).at, given.at);
+  const mapped = [55.9502, -4.7799];
+  const near = solveRoute(steps, osm(...streets, { type: 'node', lat: mapped[0], lon: mapped[1], tags: { name: 'Driving Test Centre' } }), { start: given });
+  close(markerFor(near, 0).at, mapped);
+});
+
+test('the real route starts at the Greenock centre on Union Street', () => {
+  assert.match(ROUTE.start.address, /Union Street, Greenock PA16 8DD/);
+  assert.ok(metres(ROUTE.start.at, [55.9529, -4.7693]) < 1);
+});

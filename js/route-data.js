@@ -7,6 +7,13 @@
 export const ROUTE = Object.freeze({
   id: 'greenock-1',
   title: 'Greenock test route',
+  // Where the route starts and ends. The position is the postcode's, so it's
+  // within a street or so; OpenStreetMap's own spot for the centre wins if it's close.
+  start: Object.freeze({
+    name: 'Greenock Driving Test Centre',
+    address: '19A Union Street, Greenock PA16 8DD',
+    at: [55.9529, -4.7693],
+  }),
   steps: [
     { road: 'DTC', direction: 'Right', names: [] },
     { road: 'Union St', direction: 'T/L left', names: ['Union Street'] },

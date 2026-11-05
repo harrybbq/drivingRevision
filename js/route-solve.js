@@ -6,6 +6,7 @@
 export const BBOX = Object.freeze([55.93, -4.805, 55.965, -4.72]); // Greenock: south, west, north, east
 
 const GAP = 60; // metres: streets mapped this close count as meeting (e.g. split at a junction)
+const CENTRE_NEAR = 300; // metres: a "test centre" in the map data this close to the given start is the one
 const SAME_PLACE = 25; // metres: a junction this close to where we joined is the one we came from
 
 const EARTH = 6371000;
@@ -237,12 +238,16 @@ function nearestOn(g, name, point) {
 
 // ------------------------------------------------------------------ solve
 
-// steps: [{ road, direction, names }] (see route-data.js). Returns what to draw:
+// steps: [{ road, direction, names }] (see route-data.js); start: { name, at } for
+// the test centre, if known. Returns what to draw:
 //   markers  [{ step, at, approx }]  where each row's instruction happens
 //   lines    [{ step, path, approx }] the route, street by street
 //   problems [{ step, message }]     what couldn't be placed
-export function solveRoute(steps, osm) {
+export function solveRoute(steps, osm, { start: given = null } = {}) {
   const g = buildGraph(osm);
+  // Use the map's own spot for the centre if it's near the one we were given;
+  // otherwise the given one (the map's could be some other "test centre").
+  if (given && (!g.dtc || metres(g.dtc.at, given.at) > CENTRE_NEAR)) g.dtc = { at: given.at, name: given.name };
   const problems = [];
   const markers = [];
   const lines = [];
