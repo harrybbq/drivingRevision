@@ -119,7 +119,7 @@ function render() {
   body.replaceChildren(
     h('div', { class: 'route-head' },
       h('h2', {}, ROUTE.title),
-      h('p', { class: 'route-status' }, `Starts and ends at ${ROUTE.start.name}, ${ROUTE.start.address}.`),
+      h('p', { class: 'route-start' }, `Starts and ends at ${ROUTE.start.name}, ${ROUTE.start.address}.`),
       h('p', { class: 'route-key' }, 'T/L traffic lights · EOR end of road'),
       statusLine()),
     h('div', { class: 'route-actions' },
