@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # deploy-pages looks up the artifact this run uploaded
   pages: write
   id-token: write
 
